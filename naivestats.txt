@@ -1,0 +1,39 @@
+Using default tracefiles in ./traces/
+Measuring performance with a cycle counter.
+Processor clock rate ~= 2261.1 MHz
+...................ERROR [trace ./traces/needle.rep, line 95411]: mm_malloc failed.
+.........
+Results for mm malloc:
+  valid  util   ops    secs     Kops  trace
+   yes     0%  100000  0.008992 11120 ./traces/alaska.rep
+ * yes    23%    4805  0.000718  6696 ./traces/amptjp.rep
+ * yes    30%    4162  0.000378 11008 ./traces/bash.rep
+ * yes    44%   57716  0.006176  9345 ./traces/boat.rep
+ * yes    19%    5032  0.000741  6788 ./traces/cccp.rep
+ * yes    34%   11991  0.001158 10356 ./traces/chrome.rep
+ * yes     2%   20000  0.002068  9672 ./traces/coalesce-big.rep
+   yes     0%   14400  0.002120  6794 ./traces/coalescing-bal.rep
+   yes   100%      15  0.000002  6812 ./traces/corners.rep
+ * yes    30%    5683  0.000856  6643 ./traces/cp-decl.rep
+ u yes     1%      --        --    -- ./traces/exhaust.rep
+ * yes    32%    8000  0.000763 10489 ./traces/firefox.rep
+   yes    63%   99804  0.007963 12534 ./traces/firefox-reddit.rep
+   yes    68%     118  0.000016  7418 ./traces/hostname.rep
+ * yes    65%   19405  0.002172  8933 ./traces/login.rep
+ * yes    25%     200  0.000018 11065 ./traces/lrucd.rep
+   yes    75%     372  0.000040  9188 ./traces/ls.rep
+   yes    94%      10  0.000002  6645 ./traces/malloc.rep
+   yes    77%      17  0.000001 11383 ./traces/malloc-free.rep
+ *  no      -       -         -     - ./traces/needle.rep
+ * yes    34%     200  0.000020  9806 ./traces/nlydf.rep
+   yes    71%    1494  0.000170  8784 ./traces/perl.rep
+ * yes    32%     200  0.000018 11037 ./traces/qyqyc.rep
+ * yes    36%    4800  0.000689  6970 ./traces/random.rep
+ * yes    37%    4800  0.000687  6984 ./traces/random2.rep
+ * yes    83%     147  0.000019  7767 ./traces/rm.rep
+ * yes    28%     200  0.000018 10877 ./traces/rulsr.rep
+ p yes     --    6495  0.000662  9818 ./traces/seglist.rep
+   yes   100%      12  0.000002  7980 ./traces/short2.rep
+            -         -     -
+
+Terminated with 1 errors
