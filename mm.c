@@ -70,7 +70,9 @@
 #define PREV_BLKP(ptr)  ((char *)(ptr) - GET_SIZE(((char *)(ptr) - DSIZE)))
 
 /* Global variables */
-static char *heap_listp = 0;  /* Pounter to first block */
+static char *heap_listp = 0;  /* Pointer to first block */
+char *free_listp = 0;   /* Pointer to list to list of free blocks */ 
+
 #ifdef NEXT_FIT
 static char *rover;           /* Next fit rover */
 #endif
