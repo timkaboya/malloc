@@ -63,11 +63,15 @@
 
 /* Given block ptr ptr, compute address of its header and footer */
 #define HDRP(ptr)       ((char *)(ptr) - WSIZE)
-#define FTRP(ptr)       ((char *)(ptr) + GET_SIZE(HDRP(ptr)) - DSIZE)
+#define FTRP(ptr)       ((char *)(ptr) + GET_SIZE(HDRP(ptr)) - 2*DSIZE)
 
 /* Given block ptr ptr, compute address of next and previous blocks */
 #define NEXT_BLKP(ptr)  ((char *)(ptr) + GET_SIZE(((char *)(ptr) - WSIZE)))
-#define PREV_BLKP(ptr)  ((char *)(ptr) - GET_SIZE(((char *)(ptr) - DSIZE)))
+#define PREV_BLKP(ptr)  ((char *)(ptr) - GET_SIZE(((char *)(ptr) - 2*DSIZE)))
+
+/* Given free list ptr, compute address of next and previous free list ptrs */
+#define NEXT_FREEP(ptr)  ((char *)(ptr))
+#define PREV_FREEP(ptr)  ((char *)(ptr) + DSIZE)
 
 /* Global variables */
 static char *heap_listp = 0;  /* Pointer to first block */
@@ -85,20 +89,27 @@ static void *coalesce(void *ptr);
 /* My own helpers: :) */
 void printblock(void *ptr);
 void checkblock(void *ptr);
+void insertfreeblock(void *ptr);
+void deletefreeblock(void *ptr);
 
 /*
  * Initialize memory manager: return -1 on error, 0 on success.
+ * Memory is essentially one huge block that is in free list. 
  */
 int mm_init(void) {
-    /* Create the initial empty heap */
+    /* Create the initial empty heap(free list) */
     if ((heap_listp = mem_sbrk(4*WSIZE)) == (void *)-1) 
         return -1;
     PUT(heap_listp, 0);                          /* Alignment padding */
     PUT(heap_listp + (1*WSIZE), PACK(DSIZE, 1)); /* Prologue header */ 
     PUT(heap_listp + (2*WSIZE), PACK(DSIZE, 1)); /* Prologue footer */ 
     PUT(heap_listp + (3*WSIZE), PACK(0, 1));     /* Epilogue header */
-    heap_listp += (2*WSIZE);                     
+    heap_listp += (2*WSIZE);                    
 
+    free_listp = heap_listp + 2*WSIZE;      /* Free list pointer to block 1 */
+    *((char **)free_listp) = NULL;                   /* Set init next pointer to NULL */
+    *((char **)(free_listp + DSIZE)) = NULL;           /* Set init prev pointer to NULL */
+    
 #ifdef NEXT_FIT
     rover = heap_listp;
 #endif
@@ -425,7 +436,7 @@ void printblock(void *ptr)  {
 void checkblock(void *ptr)  {
     /* Check Minimum size */
     if (GET_ALLOC(HDRP(ptr))) {
-        if (GET_SIZE(HDRP(ptr)) < (8*DSIZE))
+        if (GET_SIZE(HDRP(ptr)) < (2*DSIZE))
             printf("Addr: %p - ** Min Size Error ** \n", ptr);
     }
     /* Header/Footer Alignmment */
@@ -440,5 +451,25 @@ void checkblock(void *ptr)  {
     if ((GET_SIZE(HDRP(ptr)) != GET_SIZE(FTRP(ptr))) ||
             (GET_ALLOC(HDRP(ptr)) != GET_ALLOC(FTRP(ptr))))
         printf("Addr: %p - ** Header Footer mismatch** \n", ptr);
+
+}
+
+
+/* 
+ * Insert Free Block - Add free block to list.
+ * Free block is added to the front of the list by pointing its next field
+ * to Current front ptr and the prev of curr to new block
+ */
+void insertfreeblock(void *ptr) {
+
+}
+
+/* 
+ * Delete free block - Removes block from list
+ * Set next of prev block to next of current block
+ * Set prev of next block to previous of current block
+ *
+ */
+void deletefreeblock(void *ptr) {
 
 }

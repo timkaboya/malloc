@@ -423,7 +423,7 @@ void printblock(void *ptr)  {
 void checkblock(void *ptr)  {
     /* Check Minimum size */
     if (GET_ALLOC(HDRP(ptr))) {
-        if (GET_SIZE(HDRP(ptr)) < (8*DSIZE))
+        if (GET_SIZE(HDRP(ptr)) < (2*DSIZE))
             printf("Addr: %p - ** Min Size Error ** \n", ptr);
     }
     /* Header/Footer Alignmment */
