@@ -63,19 +63,19 @@
 
 /* Given block ptr ptr, compute address of its header and footer */
 #define HDRP(ptr)       ((char *)(ptr) - WSIZE)
-#define FTRP(ptr)       ((char *)(ptr) + GET_SIZE(HDRP(ptr)) - 2*DSIZE)
+#define FTRP(ptr)       ((char *)(ptr) + GET_SIZE(HDRP(ptr)) - DSIZE)
 
 /* Given block ptr ptr, compute address of next and previous blocks */
 #define NEXT_BLKP(ptr)  ((char *)(ptr) + GET_SIZE(((char *)(ptr) - WSIZE)))
-#define PREV_BLKP(ptr)  ((char *)(ptr) - GET_SIZE(((char *)(ptr) - 2*DSIZE)))
+#define PREV_BLKP(ptr)  ((char *)(ptr) - GET_SIZE(((char *)(ptr) - DSIZE)))
 
 /* Given free list ptr, compute address of next and previous free list ptrs */
-#define NEXT_FREEP(ptr)  ((char *)(ptr))
-#define PREV_FREEP(ptr)  ((char *)(ptr) + DSIZE)
+#define NEXT_FREEP(ptr)  (*(char **)(ptr))
+#define PREV_FREEP(ptr)  (*(char **)(ptr + DSIZE))
 
 /* Global variables */
 static char *heap_listp = 0;  /* Pointer to first block */
-char *free_listp = 0;   /* Pointer to list to list of free blocks */ 
+static char *free_listp = 0;   /* Pointer to list to list of free blocks */ 
 
 #ifdef NEXT_FIT
 static char *rover;           /* Next fit rover */
@@ -106,9 +106,9 @@ int mm_init(void) {
     PUT(heap_listp + (3*WSIZE), PACK(0, 1));     /* Epilogue header */
     heap_listp += (2*WSIZE);                    
 
-    free_listp = heap_listp + 2*WSIZE;      /* Free list pointer to block 1 */
-    *((char **)free_listp) = NULL;                   /* Set init next pointer to NULL */
-    *((char **)(free_listp + DSIZE)) = NULL;           /* Set init prev pointer to NULL */
+    free_listp = heap_listp + DSIZE;                /* Free list points to block 1 */
+    NEXT_FREEP(free_listp) = NULL;                  /* Set init next pointer to NULL */
+    PREV_FREEP(free_listp) = NULL;                  /* Set init prev pointer to NULL */
     
 #ifdef NEXT_FIT
     rover = heap_listp;
@@ -249,7 +249,8 @@ static int aligned(const void *p) {
  */
 void mm_checkheap(int lineno) {
     void *ptr;
-    ptr = heap_listp;   /* Start from the first block address */
+    int numfree1 = 0, numfree2 = 0;     /* Count free blocks */
+    ptr = heap_listp;                   /* Start from the first block address */
     /* Check prologue */ 
     if ((GET_SIZE(ptr) != 8) || (GET_ALLOC(ptr) != 1))
         printf("Addr: %p - ** Prologue Error** \n", ptr);
@@ -262,7 +263,7 @@ void mm_checkheap(int lineno) {
         /* Check each block's address alignment */
         if (!aligned(ptr))
             printf("Addr: %p - ** Block Alignment Error** \n", ptr);
-        /* Check Heap boundaries */ 
+        /* Each block's bounds check */ 
         if (!in_heap(ptr))
             printf("Addr: %p - ** Out of Heap Bounds Error** \n", ptr);
 
@@ -272,12 +273,32 @@ void mm_checkheap(int lineno) {
         if (!(GET_ALLOC(HDRP(ptr)) || GET_ALLOC(HDRP(NEXT_BLKP(ptr)))))
             printf("Addr: %p - ** Coalescing Error** \n", ptr);
 
+        /* Count number of free blocks */
+        if(!(GET_ALLOC(HDRP(ptr))))
+            numfree1++;
+
         ptr = NEXT_BLKP(ptr);
     }
 
 
     /* Heap Check for explicit + segre list ++ Check handount */ 
+    ptr = free_listp;        
+    /* Iterating through free list */ 
+    while (NEXT_FREEP(ptr) != NULL) {
+        /* All next/prev pointers are consistent */
+        if (! (PREV_FREEP(NEXT_FREEP(ptr)) == NEXT_FREEP(PREV_FREEP(ptr)))) 
+            printf("Addr: %p - ** Next/Prev Consistency Error ** \n", ptr);
 
+        /* Free List bounds check */ 
+        if (!in_heap(ptr))
+            printf("Addr: %p - ** Free List Out of bounds** \n", ptr);
+        numfree2++; 
+
+        ptr = NEXT_FREEP(ptr);
+    }
+
+    if (numfree1 != numfree2)
+        printf("Error: - ** Free List Count Error** \n");
 
     lineno = lineno; /* keep gcc happy */
 }
@@ -461,8 +482,14 @@ void checkblock(void *ptr)  {
  * to Current front ptr and the prev of curr to new block
  */
 void insertfreeblock(void *ptr) {
+    NEXT_FREEP(ptr) = free_listp;                /* Set curr next to head of list */
+    PREV_FREEP(ptr) = NULL;
+    PREV_FREEP(free_listp) = ptr;                
+
+    free_listp = ptr;                            /* curr ptr is now head of list */
 
 }
+
 
 /* 
  * Delete free block - Removes block from list
@@ -471,5 +498,11 @@ void insertfreeblock(void *ptr) {
  *
  */
 void deletefreeblock(void *ptr) {
+    /* Changing pointers of Next and prev of ptr to point to each other */
+    NEXT_FREEP(PREV_FREEP(ptr)) = NEXT_FREEP(ptr); 
+    PREV_FREEP(NEXT_FREEP(ptr)) = PREV_FREEP(ptr);
 
+    /* Overwriting ptr values */
+    PREV_FREEP(ptr) = NULL;
+    NEXT_FREEP(ptr) = NULL;
 }
