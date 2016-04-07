@@ -1,0 +1,3 @@
+Using default tracefiles in ./traces/
+Measuring performance with a cycle counter.
+Processor clock rate ~= 2261.0 MHz
