@@ -21,12 +21,13 @@
 #define free mm_free
 #define realloc mm_realloc
 #define calloc mm_calloc
+#define checkheap mm_checkheap
 #endif /* def DRIVER */
 
 
 /* If you want debugging output, use the following macro.  When you hand
  * in, remove the #define DEBUG line. */
-// #define DEBUG
+#define DEBUG
 #ifdef DEBUG
 # define dbg_printf(...) printf(__VA_ARGS__)
 #else
@@ -70,8 +71,8 @@
 #define PREV_BLKP(ptr)  ((char *)(ptr) - GET_SIZE(((char *)(ptr) - DSIZE)))
 
 /* Given free list ptr, compute address of next and previous free list ptrs */
-#define NEXT_FREEP(ptr)  (*(char **)(ptr + DSIZE))
-#define PREV_FREEP(ptr)  (*(char **)(ptr))
+#define NEXT_FREEP(ptr)  (*(char **)((char *)(ptr) + DSIZE))
+#define PREV_FREEP(ptr)  (*(char **)((char * )(ptr)))
 
 /* Global variables */
 static char *heap_listp = 0;  /* Pointer to first block */
@@ -87,16 +88,18 @@ static void place(void *ptr, size_t asize);
 static void *find_fit(size_t asize);
 static void *coalesce(void *ptr);
 /* My own helpers: :) */
-void printblock(void *ptr);
-void checkblock(void *ptr);
-void insertfreeblock(void *ptr);
-void removefreeblock(void *ptr);
-
+static void printblock(void *ptr);
+static void checkblock(void *ptr);
+static void insertfreeblock(void *ptr);
+static void removefreeblock(void *ptr);
+static int freeListEdge(void *ptr);
 /*
  * Initialize memory manager: return -1 on error, 0 on success.
  * Memory is essentially one huge block that is in free list. 
  */
 int mm_init(void) {
+    printf("Calling init() \n");
+    
     /* Create the initial empty heap(free list) */
     if ((heap_listp = mem_sbrk(4*WSIZE)) == (void *)-1) 
         return -1;
@@ -109,7 +112,8 @@ int mm_init(void) {
     free_listp = heap_listp + DSIZE;        /* Free list points to block 1 */
     PREV_FREEP(free_listp) = NULL;          /* Set init prev pointer to NULL */
     NEXT_FREEP(free_listp) = NULL;          /* Set init next pointer to NULL */
-    
+
+
 #ifdef NEXT_FIT
     rover = heap_listp;
 #endif
@@ -117,6 +121,7 @@ int mm_init(void) {
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
     if (extend_heap(CHUNKSIZE/WSIZE) == NULL) 
         return -1;
+    checkheap(__LINE__);
     return 0;
 }
 
@@ -128,6 +133,8 @@ void *malloc (size_t size) {
     size_t extendsize; /* Amount to extend heap if no fit */
     char *ptr;      
 
+    printf("Called malloc(%ld)\n",size);
+    
     if (heap_listp == 0){
         mm_init();
     }
@@ -135,6 +142,8 @@ void *malloc (size_t size) {
     if (size == 0)
         return NULL;
 
+    checkheap(__LINE__);
+    
     /* Adjust block size to include overhead and alignment reqs. */
     if (size <= DSIZE)                                          
         asize = 2*DSIZE;                                        
@@ -160,6 +169,7 @@ void *malloc (size_t size) {
  * free - Free a block
  */
 void free (void *ptr) {
+    printf("Called free(%lx)\n",(long)ptr);
     if (ptr == 0) 
         return;
 
@@ -167,6 +177,8 @@ void free (void *ptr) {
     if (heap_listp == 0){
         mm_init();
     }
+
+    checkheap(__LINE__);
 
     /* Set header, footer alloc bits to zero */
     PUT(HDRP(ptr), PACK(size, 0));
@@ -253,6 +265,9 @@ void mm_checkheap(int lineno) {
     void *ptr;
     int numfree1 = 0, numfree2 = 0;     /* Count free blocks */
     ptr = heap_listp;                   /* Start from the first block address */
+
+    printf("Line num: %d \n", lineno);
+    
     /* Check prologue */ 
     if ((GET_SIZE(ptr) != 8) || (GET_ALLOC(ptr) != 1))
         printf("Addr: %p - ** Prologue Error** \n", ptr);
@@ -261,7 +276,8 @@ void mm_checkheap(int lineno) {
     /* Iterating through entire heap. Convoluted code checks that
      * we are not at the epilogue. Loops thr and checks epilogue block! */
     while (!((GET_SIZE(HDRP(ptr)) == 0) && (GET_ALLOC(HDRP(ptr)) == 1))) {
-
+        printf("Next: %lx \n", (long)NEXT_FREEP(ptr));
+        printf("Prev: %lx \n", (long)PREV_FREEP(ptr));
         /* Check each block's address alignment */
         if (!aligned(ptr))
             printf("Addr: %p - ** Block Alignment Error** \n", ptr);
@@ -288,14 +304,16 @@ void mm_checkheap(int lineno) {
     if (ptr == 0) {
         return;
     }
-    printf("Null Add: %p\n", NEXT_FREEP(ptr));
+
+    // printf("Null Add: %p\n", PREV_FREEP(ptr));
     
     /* Iterating through free list */ 
     while (ptr != NULL) {
-        /* All next/prev pointers are consistent */
-        //if (! (PREV_FREEP(NEXT_FREEP(ptr)) == NEXT_FREEP(PREV_FREEP(ptr)))) 
-          //  printf("Addr: %p - ** Next/Prev Consistency Error ** \n", ptr);
-
+        if (!freeListEdge(ptr)) {
+            /* All next/prev pointers are consistent */
+            if (PREV_FREEP(NEXT_FREEP(ptr)) != NEXT_FREEP(PREV_FREEP(ptr))) 
+                printf("Addr: %p - ** Next/Prev Consistency Error ** \n", ptr);
+        }
         /* Free List bounds check */ 
         if (!in_heap(ptr))
             printf("Addr: %p - ** Free List Out of bounds** \n", ptr);
@@ -309,7 +327,6 @@ void mm_checkheap(int lineno) {
 
     lineno = lineno; /* keep gcc happy */
 
-    printf("Line num: %d \n", lineno);
 }
 
 
@@ -349,7 +366,11 @@ static void *coalesce(void *ptr)
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(ptr)));
     size_t size = GET_SIZE(HDRP(ptr));
 
+    checkheap(__LINE__);
+
     if (prev_alloc && next_alloc) {            /* Case 1 */
+        // printf("In coalesce, no near free block, Insert!\n");
+        insertfreeblock(ptr);
         return ptr;
     }
 
@@ -378,6 +399,8 @@ static void *coalesce(void *ptr)
         ptr = PREV_BLKP(ptr);
     }
 
+    checkheap(__LINE__);
+
     insertfreeblock(ptr);                  /* Insert Coalesced block in free list */
 
 #ifdef NEXT_FIT
@@ -396,6 +419,8 @@ static void *coalesce(void *ptr)
 static void place(void *ptr, size_t asize)
 {
     size_t csize = GET_SIZE(HDRP(ptr));   
+
+    checkheap(__LINE__);
 
     if ((csize - asize) >= (2*DSIZE)) { 
         PUT(HDRP(ptr), PACK(asize, 1));
@@ -437,6 +462,7 @@ static void *find_fit(size_t asize)
     /* First-fit search */
     void *ptr;
 
+    /* TODO: Iterate over free list instead */
     for (ptr = heap_listp; GET_SIZE(HDRP(ptr)) > 0; ptr = NEXT_BLKP(ptr)) {
         if (!GET_ALLOC(HDRP(ptr)) && (asize <= GET_SIZE(HDRP(ptr)))) {
             return ptr;
@@ -505,12 +531,14 @@ void checkblock(void *ptr)  {
  */
 void insertfreeblock(void *ptr) {
     /* special case */ 
-    if (free_listp == 0) {
+    if (free_listp == 0 || free_listp == NULL) {
         NEXT_FREEP(ptr) = NULL;
         PREV_FREEP(ptr) = NULL;
         free_listp = ptr;
         return;
     }
+
+    checkheap(__LINE__);
 
     PREV_FREEP(ptr) = NULL;
     NEXT_FREEP(ptr) = free_listp;       /* Set curr next to head of list */
@@ -531,6 +559,8 @@ void removefreeblock(void *ptr) {
     if (free_listp == 0)
         return;
 
+    checkheap(__LINE__);
+
     /* Case 1 */
     if ((PREV_FREEP(ptr) == NULL) && (NEXT_FREEP(ptr) == NULL)) {
         free_listp = 0;
@@ -539,22 +569,31 @@ void removefreeblock(void *ptr) {
     /* Case 2 */
     else if ((PREV_FREEP(ptr) == NULL) && (NEXT_FREEP(ptr) != NULL)) {
         printf("In remove, ptr is first one\n");
-        PREV_FREEP(NEXT_FREEP(ptr)) = PREV_FREEP(ptr);  
         free_listp = NEXT_FREEP(ptr);
+        PREV_FREEP(free_listp) = NULL;  
     }
 
     /* Case 3 */
     else if ((PREV_FREEP(ptr) != NULL) && (NEXT_FREEP(ptr) == NULL)) {
         printf("In remove, ptr is last one\n");
          /* Last one now points to NULL */
-        NEXT_FREEP(PREV_FREEP(ptr)) = NEXT_FREEP(ptr); 
+        NEXT_FREEP(PREV_FREEP(ptr)) = NULL; 
     }
     
     /* Case 4 */
-    else {
-        printf("In remove, ptr is a middle block. %p \n", PREV_FREEP(NEXT_FREEP(ptr)));
+    else if ((PREV_FREEP(ptr) != NULL) && (NEXT_FREEP(ptr) != NULL)) {
+        printf("In remove, ptr is a middle block. %p \n", NEXT_FREEP(ptr));
         PREV_FREEP(NEXT_FREEP(ptr)) = PREV_FREEP(ptr);  
         NEXT_FREEP(PREV_FREEP(ptr)) = NEXT_FREEP(ptr); 
     }
 
+}
+
+
+/* 
+ * freeListEdge - Returns 1 is free list ptr is at edge of list. 
+ * This check is used to handle edge conditions. 
+ */
+int freeListEdge(void *ptr) {
+    return ((NEXT_FREEP(ptr) == NULL) || (PREV_FREEP(ptr) == NULL));
 }
