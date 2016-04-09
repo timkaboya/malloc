@@ -168,6 +168,9 @@ void free (void *ptr) {
     /* Set header, footer alloc bits to zero */
     PUT(HDRP(ptr), PACK(size, 0));
     PUT(FTRP(ptr), PACK(size, 0));
+
+    checkheap(__LINE__); 
+
     coalesce(ptr);
 }
 
@@ -254,25 +257,33 @@ void mm_checkheap(int lineno) {
     printf("Line num: %d \n", lineno);
     
     /* Check prologue */ 
-    if ((GET_SIZE(ptr) != 8) || (GET_ALLOC(ptr) != 1))
+    if ((GET_SIZE(ptr) != 8) || (GET_ALLOC(ptr) != 1)) {
         printf("Addr: %p - ** Prologue Error** \n", ptr);
+        assert(0);
+    }
     ptr = NEXT_BLKP(ptr);
 
     /* Iterating through entire heap. Convoluted code checks that
      * we are not at the epilogue. Loops thr and checks epilogue block! */
     while (!((GET_SIZE(HDRP(ptr)) == 0) && (GET_ALLOC(HDRP(ptr)) == 1))) {
         /* Check each block's address alignment */
-        if (!aligned(ptr))
+        if (!aligned(ptr)) {
             printf("Addr: %p - ** Block Alignment Error** \n", ptr);
+            assert(0);
+        }
         /* Each block's bounds check */ 
-        if (!in_heap(ptr))
+        if (!in_heap(ptr)) {
             printf("Addr: %p - ** Out of Heap Bounds Error** \n", ptr);
+            assert(0);
+        }
 
         /* Check each block's header and footer */
         checkblock(ptr);
         /* Check coalescing: If alloc bit of current and next block is 0 */
-        if (!(GET_ALLOC(HDRP(ptr)) || GET_ALLOC(HDRP(NEXT_BLKP(ptr)))))
+        if (!(GET_ALLOC(HDRP(ptr)) || GET_ALLOC(HDRP(NEXT_BLKP(ptr))))) {
             printf("Addr: %p - ** Coalescing Error** \n", ptr);
+            assert(0);
+        }
 
         /* Count number of free blocks */
         if(!(GET_ALLOC(HDRP(ptr))))
@@ -294,21 +305,25 @@ void mm_checkheap(int lineno) {
     while (ptr != NULL) {
         if (!freelistedge(ptr)) {
             /* All next/prev pointers are consistent */
-            if (PREV_FREEP(NEXT_FREEP(ptr)) != NEXT_FREEP(PREV_FREEP(ptr))) 
+            if (PREV_FREEP(NEXT_FREEP(ptr)) != NEXT_FREEP(PREV_FREEP(ptr))) {
                 printf("Addr: %p - ** Next/Prev Consistency Error ** \n", ptr);
+                assert(0);
+            }
         }
         /* Free List bounds check */ 
-        if (!in_heap(ptr))
+        if (!in_heap(ptr)) {
             printf("Addr: %p - ** Free List Out of bounds** \n", ptr);
+            assert(0);
+        }
         numfree2++; 
 
         ptr = NEXT_FREEP(ptr);
     }
 
-    if (numfree1 != numfree2)
+    if (numfree1 != numfree2) {
         printf(" Error: - ** %d Free List Count %d ** \n", numfree1, numfree2);
-
-    lineno = lineno; /* keep gcc happy */
+        assert(0);
+    }
 
 }
 
@@ -348,6 +363,7 @@ static void *coalesce (void *ptr)
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(ptr)));
     size_t size = GET_SIZE(HDRP(ptr));
 
+    checkheap(__LINE__); 
 
     if (prev_alloc && !next_alloc) {      /* Case 2 */
         size += GET_SIZE(HDRP(NEXT_BLKP(ptr)));
@@ -377,6 +393,8 @@ static void *coalesce (void *ptr)
 
     insertfreeblock(ptr);                  /* Insert Coalesced block in free list */
 
+    checkheap(__LINE__); 
+    
     return ptr;
 }
 
@@ -456,21 +474,23 @@ void printblock(void *ptr)  {
 void checkblock(void *ptr)  {
     /* Check Minimum size */
     if (GET_ALLOC(HDRP(ptr))) {
-        if (GET_SIZE(HDRP(ptr)) < (2*DSIZE))
+        if (GET_SIZE(HDRP(ptr)) < (2*DSIZE)) {
             printf("Addr: %p - ** Min Size Error ** \n", ptr);
+            assert(0);
+        }
     }
     /* Header/Footer Alignmment */
-    if (GET_SIZE(HDRP(ptr)) % ALIGNMENT)
+    if (GET_SIZE(HDRP(ptr)) % ALIGNMENT)  {
         printf("Addr: %p - ** Header Not double word aligned** \n", ptr);
-    
-    /* Check Prev/Next Allocation */ 
-
-    /* Check free bit consistency */ 
+        assert(0);
+    }
 
     /* Check header: footer match */
     if ((GET_SIZE(HDRP(ptr)) != GET_SIZE(FTRP(ptr))) ||
-            (GET_ALLOC(HDRP(ptr)) != GET_ALLOC(FTRP(ptr))))
+            (GET_ALLOC(HDRP(ptr)) != GET_ALLOC(FTRP(ptr)))) {
         printf("Addr: %p - ** Header Footer mismatch** \n", ptr);
+        assert(0);
+    }
 
 }
 
@@ -526,6 +546,7 @@ void removefreeblock(void *ptr) {
     }
     
     /* Case 4 */
+
     else if ((PREV_FREEP(ptr) != NULL) && (NEXT_FREEP(ptr) != NULL)) {
         PREV_FREEP(NEXT_FREEP(ptr)) = PREV_FREEP(ptr);  
         NEXT_FREEP(PREV_FREEP(ptr)) = NEXT_FREEP(ptr); 
