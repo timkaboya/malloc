@@ -34,11 +34,6 @@
 # define dbg_printf(...)
 #endif
 
-/* 
- * If NEXT_FIT defined use next fit search, else use first fit. 
- * We are using next fit
- */
-#define NEXT_FIT
 
 /* Basic constants and macros */
 #define WSIZE       4       /* Word and header/footer size (bytes) */ 
@@ -78,10 +73,6 @@
 static char *heap_listp = 0;  /* Pointer to first block */
 static char *free_listp = 0;   /* Pointer to list to list of free blocks */ 
 
-#ifdef NEXT_FIT
-static char *rover;           /* Next fit rover */
-#endif
-
 /* Function prototypes for internal helper routines */
 static void *extend_heap(size_t words);
 static void place(void *ptr, size_t asize);
@@ -92,7 +83,7 @@ static void printblock(void *ptr);
 static void checkblock(void *ptr);
 static void insertfreeblock(void *ptr);
 static void removefreeblock(void *ptr);
-static int freeListEdge(void *ptr);
+static int freelistedge(void *ptr);
 /*
  * Initialize memory manager: return -1 on error, 0 on success.
  * Memory is essentially one huge block that is in free list. 
@@ -109,19 +100,17 @@ int mm_init(void) {
     PUT(heap_listp + (3*WSIZE), PACK(0, 1));     /* Epilogue header */
     heap_listp += (2*WSIZE);                    
 
-    free_listp = heap_listp + DSIZE;        /* Free list points to block 1 */
-    PREV_FREEP(free_listp) = NULL;          /* Set init prev pointer to NULL */
-    NEXT_FREEP(free_listp) = NULL;          /* Set init next pointer to NULL */
-
-
-#ifdef NEXT_FIT
-    rover = heap_listp;
-#endif
-
+    
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
     if (extend_heap(CHUNKSIZE/WSIZE) == NULL) 
         return -1;
+
+    free_listp = heap_listp + DSIZE;
+    PREV_FREEP(free_listp) = NULL;
+    NEXT_FREEP(free_listp) = NULL;
+
     checkheap(__LINE__);
+
     return 0;
 }
 
@@ -142,7 +131,6 @@ void *malloc (size_t size) {
     if (size == 0)
         return NULL;
 
-    checkheap(__LINE__);
     
     /* Adjust block size to include overhead and alignment reqs. */
     if (size <= DSIZE)                                          
@@ -309,7 +297,7 @@ void mm_checkheap(int lineno) {
     
     /* Iterating through free list */ 
     while (ptr != NULL) {
-        if (!freeListEdge(ptr)) {
+        if (!freelistedge(ptr)) {
             /* All next/prev pointers are consistent */
             if (PREV_FREEP(NEXT_FREEP(ptr)) != NEXT_FREEP(PREV_FREEP(ptr))) 
                 printf("Addr: %p - ** Next/Prev Consistency Error ** \n", ptr);
@@ -328,7 +316,6 @@ void mm_checkheap(int lineno) {
     lineno = lineno; /* keep gcc happy */
 
 }
-
 
 
 /* 
@@ -352,7 +339,7 @@ static void *extend_heap(size_t words)
     PUT(HDRP(ptr), PACK(size, 0));         /* Free block header */   
     PUT(FTRP(ptr), PACK(size, 0));         /* Free block footer */   
     PUT(HDRP(NEXT_BLKP(ptr)), PACK(0, 1)); /* New epilogue header */ 
-
+    
     /* Coalesce if the previous block was free */
     return coalesce(ptr);                                          
 }
@@ -360,21 +347,15 @@ static void *extend_heap(size_t words)
 /*
  * coalesce - Boundary tag coalescing. Return ptr to coalesced block
  */
-static void *coalesce(void *ptr) 
+static void *coalesce (void *ptr) 
 {
     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(ptr)));
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(ptr)));
     size_t size = GET_SIZE(HDRP(ptr));
 
-    checkheap(__LINE__);
 
-    if (prev_alloc && next_alloc) {            /* Case 1 */
-        // printf("In coalesce, no near free block, Insert!\n");
-        insertfreeblock(ptr);
-        return ptr;
-    }
-
-    else if (prev_alloc && !next_alloc) {      /* Case 2 */
+    if (prev_alloc && !next_alloc) {      /* Case 2 */
+        printf("In coalesce, next block free, Insert!\n");
         size += GET_SIZE(HDRP(NEXT_BLKP(ptr)));
         removefreeblock(NEXT_BLKP(ptr));           /* remove next block */        
         PUT(HDRP(ptr), PACK(size, 0));
@@ -382,6 +363,7 @@ static void *coalesce(void *ptr)
     }
 
     else if (!prev_alloc && next_alloc) {      /* Case 3 */
+        printf("In coalesce, prev block free, Insert!\n");
         size += GET_SIZE(HDRP(PREV_BLKP(ptr)));
         removefreeblock(PREV_BLKP(ptr));          /* remove previous block */
         PUT(FTRP(ptr), PACK(size, 0));
@@ -389,7 +371,8 @@ static void *coalesce(void *ptr)
         ptr = PREV_BLKP(ptr);
     }
 
-    else {                                     /* Case 4 */
+    else if (!prev_alloc && !next_alloc){                                     /* Case 4 */
+        printf("In coalesce, next/prev block free, Insert!\n");
         size += GET_SIZE(HDRP(PREV_BLKP(ptr))) + 
             GET_SIZE(FTRP(NEXT_BLKP(ptr)));
         removefreeblock(NEXT_BLKP(ptr));           /* remove next block */        
@@ -403,12 +386,6 @@ static void *coalesce(void *ptr)
 
     insertfreeblock(ptr);                  /* Insert Coalesced block in free list */
 
-#ifdef NEXT_FIT
-    /* Make sure the rover isn't pointing into the free block */
-    /* that we just coalesced */
-    if ((rover > (char *)ptr) && (rover < NEXT_BLKP(ptr))) 
-        rover = ptr;
-#endif
     return ptr;
 }
 
@@ -429,7 +406,7 @@ static void place(void *ptr, size_t asize)
         ptr = NEXT_BLKP(ptr);
         PUT(HDRP(ptr), PACK(csize-asize, 0));
         PUT(FTRP(ptr), PACK(csize-asize, 0));
-        coalesce(ptr);
+        insertfreeblock(ptr);
     }
     else { 
         PUT(HDRP(ptr), PACK(csize, 1));
@@ -441,35 +418,20 @@ static void place(void *ptr, size_t asize)
 /* 
  * find_fit - Find a fit for a block with asize bytes 
  */
-static void *find_fit(size_t asize)
+static void *find_fit (size_t asize)
 {
-#ifdef NEXT_FIT 
-    /* Next fit search */
-    char *oldrover = rover;
-
-    /* Search from the rover to the end of list */
-    for ( ; GET_SIZE(HDRP(rover)) > 0; rover = NEXT_BLKP(rover))
-        if (!GET_ALLOC(HDRP(rover)) && (asize <= GET_SIZE(HDRP(rover))))
-            return rover;
-
-    /* search from start of list to old rover */
-    for (rover = heap_listp; rover < oldrover; rover = NEXT_BLKP(rover))
-        if (!GET_ALLOC(HDRP(rover)) && (asize <= GET_SIZE(HDRP(rover))))
-            return rover;
-
-    return NULL;  /* no fit found */
-#else 
     /* First-fit search */
     void *ptr;
+    
+    checkheap(__LINE__);
 
     /* TODO: Iterate over free list instead */
-    for (ptr = heap_listp; GET_SIZE(HDRP(ptr)) > 0; ptr = NEXT_BLKP(ptr)) {
+    for (ptr = free_listp; ptr != NULL; ptr = NEXT_FREEP(ptr)) {
         if (!GET_ALLOC(HDRP(ptr)) && (asize <= GET_SIZE(HDRP(ptr)))) {
             return ptr;
         }
     }
     return NULL; /* No fit */
-#endif
 }
 
 
@@ -538,7 +500,9 @@ void insertfreeblock(void *ptr) {
         return;
     }
 
-    checkheap(__LINE__);
+    
+    printblock(ptr);
+    printblock(free_listp); 
 
     PREV_FREEP(ptr) = NULL;
     NEXT_FREEP(ptr) = free_listp;       /* Set curr next to head of list */
@@ -591,9 +555,9 @@ void removefreeblock(void *ptr) {
 
 
 /* 
- * freeListEdge - Returns 1 is free list ptr is at edge of list. 
+ * freelistedge - Returns 1 is free list ptr is at edge of list. 
  * This check is used to handle edge conditions. 
  */
-int freeListEdge(void *ptr) {
+int freelistedge(void *ptr) {
     return ((NEXT_FREEP(ptr) == NULL) || (PREV_FREEP(ptr) == NULL));
 }
