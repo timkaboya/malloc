@@ -109,8 +109,6 @@ int mm_init(void) {
     PREV_FREEP(free_listp) = NULL;
     NEXT_FREEP(free_listp) = NULL;
 
-    checkheap(__LINE__);
-
     return 0;
 }
 
@@ -137,6 +135,7 @@ void *malloc (size_t size) {
         asize = 2*DSIZE;                                        
     else
         asize = DSIZE * ((size + (DSIZE) + (DSIZE-1)) / DSIZE); 
+
 
     /* Search the free list for a fit */
     if ((ptr = find_fit(asize)) != NULL) {  
@@ -165,8 +164,6 @@ void free (void *ptr) {
     if (heap_listp == 0){
         mm_init();
     }
-
-    checkheap(__LINE__);
 
     /* Set header, footer alloc bits to zero */
     PUT(HDRP(ptr), PACK(size, 0));
@@ -264,8 +261,6 @@ void mm_checkheap(int lineno) {
     /* Iterating through entire heap. Convoluted code checks that
      * we are not at the epilogue. Loops thr and checks epilogue block! */
     while (!((GET_SIZE(HDRP(ptr)) == 0) && (GET_ALLOC(HDRP(ptr)) == 1))) {
-        printf("Next: %lx \n", (long)NEXT_FREEP(ptr));
-        printf("Prev: %lx \n", (long)PREV_FREEP(ptr));
         /* Check each block's address alignment */
         if (!aligned(ptr))
             printf("Addr: %p - ** Block Alignment Error** \n", ptr);
@@ -355,7 +350,6 @@ static void *coalesce (void *ptr)
 
 
     if (prev_alloc && !next_alloc) {      /* Case 2 */
-        printf("In coalesce, next block free, Insert!\n");
         size += GET_SIZE(HDRP(NEXT_BLKP(ptr)));
         removefreeblock(NEXT_BLKP(ptr));           /* remove next block */        
         PUT(HDRP(ptr), PACK(size, 0));
@@ -363,7 +357,6 @@ static void *coalesce (void *ptr)
     }
 
     else if (!prev_alloc && next_alloc) {      /* Case 3 */
-        printf("In coalesce, prev block free, Insert!\n");
         size += GET_SIZE(HDRP(PREV_BLKP(ptr)));
         removefreeblock(PREV_BLKP(ptr));          /* remove previous block */
         PUT(FTRP(ptr), PACK(size, 0));
@@ -372,7 +365,6 @@ static void *coalesce (void *ptr)
     }
 
     else if (!prev_alloc && !next_alloc){                                     /* Case 4 */
-        printf("In coalesce, next/prev block free, Insert!\n");
         size += GET_SIZE(HDRP(PREV_BLKP(ptr))) + 
             GET_SIZE(FTRP(NEXT_BLKP(ptr)));
         removefreeblock(NEXT_BLKP(ptr));           /* remove next block */        
@@ -382,7 +374,6 @@ static void *coalesce (void *ptr)
         ptr = PREV_BLKP(ptr);
     }
 
-    checkheap(__LINE__);
 
     insertfreeblock(ptr);                  /* Insert Coalesced block in free list */
 
@@ -396,8 +387,6 @@ static void *coalesce (void *ptr)
 static void place(void *ptr, size_t asize)
 {
     size_t csize = GET_SIZE(HDRP(ptr));   
-
-    checkheap(__LINE__);
 
     if ((csize - asize) >= (2*DSIZE)) { 
         PUT(HDRP(ptr), PACK(asize, 1));
@@ -413,6 +402,7 @@ static void place(void *ptr, size_t asize)
         PUT(FTRP(ptr), PACK(csize, 1));
         removefreeblock(ptr);
     }
+    
 }
 
 /* 
@@ -423,8 +413,6 @@ static void *find_fit (size_t asize)
     /* First-fit search */
     void *ptr;
     
-    checkheap(__LINE__);
-
     /* TODO: Iterate over free list instead */
     for (ptr = free_listp; ptr != NULL; ptr = NEXT_FREEP(ptr)) {
         if (!GET_ALLOC(HDRP(ptr)) && (asize <= GET_SIZE(HDRP(ptr)))) {
@@ -499,11 +487,7 @@ void insertfreeblock(void *ptr) {
         free_listp = ptr;
         return;
     }
-
     
-    printblock(ptr);
-    printblock(free_listp); 
-
     PREV_FREEP(ptr) = NULL;
     NEXT_FREEP(ptr) = free_listp;       /* Set curr next to head of list */
     PREV_FREEP(free_listp) = ptr;                
@@ -523,7 +507,6 @@ void removefreeblock(void *ptr) {
     if (free_listp == 0)
         return;
 
-    checkheap(__LINE__);
 
     /* Case 1 */
     if ((PREV_FREEP(ptr) == NULL) && (NEXT_FREEP(ptr) == NULL)) {
@@ -532,21 +515,18 @@ void removefreeblock(void *ptr) {
 
     /* Case 2 */
     else if ((PREV_FREEP(ptr) == NULL) && (NEXT_FREEP(ptr) != NULL)) {
-        printf("In remove, ptr is first one\n");
         free_listp = NEXT_FREEP(ptr);
         PREV_FREEP(free_listp) = NULL;  
     }
 
     /* Case 3 */
     else if ((PREV_FREEP(ptr) != NULL) && (NEXT_FREEP(ptr) == NULL)) {
-        printf("In remove, ptr is last one\n");
          /* Last one now points to NULL */
         NEXT_FREEP(PREV_FREEP(ptr)) = NULL; 
     }
     
     /* Case 4 */
     else if ((PREV_FREEP(ptr) != NULL) && (NEXT_FREEP(ptr) != NULL)) {
-        printf("In remove, ptr is a middle block. %p \n", NEXT_FREEP(ptr));
         PREV_FREEP(NEXT_FREEP(ptr)) = PREV_FREEP(ptr);  
         NEXT_FREEP(PREV_FREEP(ptr)) = NEXT_FREEP(ptr); 
     }
