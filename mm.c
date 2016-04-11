@@ -61,7 +61,7 @@
 /* Basic constants and macros */
 #define WSIZE       4       /* Word and header/footer size (bytes) */ 
 #define DSIZE       8       /* Double word size (bytes) */
-#define CHUNKSIZE  (1<<12)  /* Extend heap by this amount (bytes) */  
+#define CHUNKSIZE  (1<<8)  /* Extend heap by this amount (bytes) */  
 #define ALIGNMENT 8         /* single word (4) or double word (8) alignment */
 #define MINIMUM   24
 
