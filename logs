@@ -1,0 +1,52 @@
+Measuring performance with a cycle counter.
+Processor clock rate ~= 2261.0 MHz
+Calling init() 
+Called realloc(0:16)
+Line num: 123 
+Called malloc(16)
+Line num: 145 
+Line num: 123 
+Called malloc(364)
+Line num: 145 
+Called realloc(0:800)
+Line num: 123 
+Called malloc(800)
+Line num: 145 
+Called realloc(0:1024)
+Line num: 123 
+Called malloc(1024)
+Line num: 145 
+Called realloc(8000004c8:2048)
+Line num: 123 
+Called malloc(2048)
+Line num: 155 
+Line num: 163 
+Called free(8000004c8)
+Line num: 179 
+Line num: 163 
+Called free(800000028)
+Line num: 179 
+Line num: 123 
+Called malloc(40)
+Line num: 145 
+Line num: 163 
+Called free(800000028)
+Line num: 179 
+Line num: 123 
+Called malloc(40)
+Line num: 145 
+Line num: 123 
+Called malloc(32)
+Line num: 145 
+Line num: 123 
+Called malloc(37)
+Line num: 145 
+Line num: 123 
+Called malloc(28)
+Line num: 145 
+Line num: 123 
+Called malloc(92)
+Line num: 145 
+Line num: 123 
+Called malloc(6)
+Line num: 145 

@@ -1,32 +1,9 @@
 /*
- * mm.c - Explicity free list Implementation
+ * mm.c
  *
  * Timothy Kaboya - tkaboya
  * HLD Description of my solution 
- * 1. Doubly linked Explicit List
- * 2. First Fit 
- *
- *  VIRTUAL MEMORY STRUCTURE 
- *  Free block
- *  [ HEADER | PREV | NEXT |    PAYLOAD    | FOOTER ]
- *  Allocated block
- *  [ HEADER |   PAYLOAD    | FOOTER ]
- *   
- *  Free List Structure
- *  [NULL  <==  Free 1 <==> Free 2 <==> Free3 <==> ... <==> FreeN ==> NULL]
- *
- * MALLOC - Uses First Fit and if block too big, block is split to
- * create new free block. 
- *
- * FREE - Find block and set its alloc bits to 0. Then append newly freed block
- * using the coalesce function that coalesces it w/ free neighbours
- *
- * REALLOC - If new size < old size, truncate new block
- * if remaining block is larger than mini add it to free list 
- * When new size > old size, just copy old size till its end
- *
- * CALLOC - Malloc for given size and then all blocks to zero. 
- *
+ * TODO
  */
 #include <assert.h>
 #include <stdio.h>
@@ -50,7 +27,7 @@
 
 /* If you want debugging output, use the following macro.  When you hand
  * in, remove the #define DEBUG line. */
-/* #define DEBUG  */
+#define DEBUG
 #ifdef DEBUG
 # define dbg_printf(...) printf(__VA_ARGS__)
 #else
@@ -63,7 +40,7 @@
 #define DSIZE       8       /* Double word size (bytes) */
 #define CHUNKSIZE  (1<<12)  /* Extend heap by this amount (bytes) */  
 #define ALIGNMENT 8         /* single word (4) or double word (8) alignment */
-#define MINIMUM   24
+
 
 #define MAX(x, y) ((x) > (y)? (x) : (y))
 /* rounds up to the nearest multiple of ALIGNMENT */
@@ -85,8 +62,8 @@
 #define FTRP(ptr)       ((char *)(ptr) + GET_SIZE(HDRP(ptr)) - DSIZE)
 
 /* Given block ptr ptr, compute address of next and previous blocks */
-#define NEXT_BLKP(ptr)  ((char *)(ptr) + GET_SIZE(HDRP(ptr)))
-#define PREV_BLKP(ptr)  ((char *)(ptr) - GET_SIZE(HDRP(ptr) - WSIZE))
+#define NEXT_BLKP(ptr)  ((char *)(ptr) + GET_SIZE(((char *)(ptr) - WSIZE)))
+#define PREV_BLKP(ptr)  ((char *)(ptr) - GET_SIZE(((char *)(ptr) - DSIZE)))
 
 /* Given free list ptr, compute address of next and previous free list ptrs */
 #define NEXT_FREEP(ptr)  (*(char **)((char *)(ptr) + DSIZE))
@@ -112,23 +89,25 @@ static int freelistedge(void *ptr);
  * Memory is essentially one huge block that is in free list. 
  */
 int mm_init(void) {
-
+    printf("Calling init() \n");
+    
     /* Create the initial empty heap(free list) */
-    if ((heap_listp = mem_sbrk(2*MINIMUM)) == (void *)-1) 
+    if ((heap_listp = mem_sbrk(4*WSIZE)) == (void *)-1) 
         return -1;
     PUT(heap_listp, 0);                          /* Alignment padding */
-    PUT(heap_listp + (1*WSIZE), PACK(MINIMUM, 1)); /* Prologue header */ 
-    PUT(heap_listp + (2*WSIZE), 0); /* Previous pointer */
-    PUT(heap_listp + (3*WSIZE), 0);    /* Next Pointer */
+    PUT(heap_listp + (1*WSIZE), PACK(DSIZE, 1)); /* Prologue header */ 
+    PUT(heap_listp + (2*WSIZE), PACK(DSIZE, 1)); /* Prologue footer */ 
+    PUT(heap_listp + (3*WSIZE), PACK(0, 1));     /* Epilogue header */
+    heap_listp += (2*WSIZE);                    
 
-    PUT(heap_listp + MINIMUM, PACK(MINIMUM, 1));      /* Prologue footer */
-    PUT(heap_listp + MINIMUM + WSIZE, PACK(0, 1));    /* Epilogue Header */
-
-    free_listp = heap_listp + DSIZE;
-
+    
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
     if (extend_heap(CHUNKSIZE/WSIZE) == NULL) 
         return -1;
+
+    free_listp = heap_listp + DSIZE;
+    PREV_FREEP(free_listp) = NULL;
+    NEXT_FREEP(free_listp) = NULL;
 
     return 0;
 }
@@ -139,25 +118,30 @@ int mm_init(void) {
 void *malloc (size_t size) {
     size_t asize;      /* Adjusted block size */
     size_t extendsize; /* Amount to extend heap if no fit */
-    char *ptr;  
+    char *ptr;      
 
-
+    
+    printf("Called malloc(%ld)\n",size);
+    
     if (heap_listp == 0){
         mm_init();
     }
-
-
     /* Ignore spurious requests */
     if (size == 0)
         return NULL;
 
-
+    
     /* Adjust block size to include overhead and alignment reqs. */
-    asize = MAX(ALIGN(size) + DSIZE, MINIMUM);
+    if (size <= DSIZE)                                          
+        asize = 2*DSIZE;                                        
+    else
+        asize = DSIZE * ((size + (DSIZE) + (DSIZE-1)) / DSIZE); 
+
 
     /* Search the free list for a fit */
     if ((ptr = find_fit(asize)) != NULL) {  
         place(ptr, asize);       
+        printf("(%ld) at Addr: %lx\n", asize, (long)ptr);
         return ptr;
     }
 
@@ -167,7 +151,6 @@ void *malloc (size_t size) {
         return NULL;                                  
     place(ptr, asize);                                 
 
-
     return ptr;
 }
 
@@ -175,8 +158,7 @@ void *malloc (size_t size) {
  * free - Free a block
  */
 void free (void *ptr) {
-
-
+    printf("Called free(%lx)\n",(long)ptr);
     if (ptr == 0) 
         return;
 
@@ -197,28 +179,21 @@ void free (void *ptr) {
  * realloc - Naive implementation of realloc
  */
 void *realloc(void *ptr, size_t size) {
-    size_t oldsize, asize;
+    size_t oldsize;
     void *newptr;
 
-    asize = MAX(ALIGN(size) + DSIZE, MINIMUM);
+    printf("Called realloc(0x%lx:%ld)\n",(long)ptr, size);
+    
     /* If size == 0 then this is just free, and we return NULL. */
     if(size == 0) {
-        free(ptr);
+        mm_free(ptr);
         return 0;
     }
 
     /* If oldptr is NULL, then this is just malloc. */
     if(ptr == NULL) {
-        return malloc(size);
+        return mm_malloc(size);
     }
-
-
-    /* Original block size */
-    oldsize = GET_SIZE(HDRP(ptr));
-
-    /* If new size is same as old, just return */
-    if (asize == oldsize)  return ptr;
-
 
     newptr = mm_malloc(size);
 
@@ -228,18 +203,22 @@ void *realloc(void *ptr, size_t size) {
     }
 
     /* Copy the old data. */
+    oldsize = GET_SIZE(HDRP(ptr));
     if(size < oldsize) oldsize = size;
     memcpy(newptr, ptr, oldsize);
 
     /* Free the old block. */
-    free(ptr);
+    mm_free(ptr);
 
     return newptr;
 }
 
 /*
  * calloc - Allocate the block and set it to zero
+ * Borrowed from mm-naive.c 
  *
+ * FYI: This function is not tested by mdriver, but it is
+ * needed to run the traces.
  */
 void *calloc (size_t nmemb, size_t size) {
     size_t bytes = nmemb * size;
@@ -269,31 +248,17 @@ static int aligned(const void *p) {
 }
 
 /* 
- * mm_checkheap - 
- * Heap Checker first checks on a block by block basis for inconsistency
- * In this order
- * - Prologue block. 
- * - Iterate through list till epilogue block
- *   On each block, call the checkblock function to check block.
- *   Count number of free blocks
- * 
- * Check ending epilogue block
- *
- * Then we check free list. 
- * - Iterate over entire free list
- *    Check for Prev/Next Allocate consistency
- *    All pointers are between heap
- *
- * Compare Block free list count to actual free list count
- *
+ * mm_checkheap - Check the heap for correctness. Helpful hint: You
+ *                can call this function using mm_checkheap(__LINE__);
+ *                to identify the line number of the call site.
  */
 void mm_checkheap(int lineno) {
     void *ptr;
     int numfree1 = 0, numfree2 = 0;     /* Count free blocks */
     ptr = heap_listp;                   /* Start from the first block address */
-
+    
     /* Check prologue */ 
-    if ((GET_SIZE(HDRP(ptr)) != MINIMUM) || (GET_ALLOC(HDRP(ptr)) != 1)) {
+    if ((GET_SIZE(ptr) != 8) || (GET_ALLOC(ptr) != 1)) {
         printf("Addr: %p - ** Prologue Error** \n", ptr);
         assert(0);
     }
@@ -302,8 +267,18 @@ void mm_checkheap(int lineno) {
     /* Iterating through entire heap. Convoluted code checks that
      * we are not at the epilogue. Loops thr and checks epilogue block! */
     while (!((GET_SIZE(HDRP(ptr)) == 0) && (GET_ALLOC(HDRP(ptr)) == 1))) {
+        /* Check each block's address alignment */
+        if (!aligned(ptr)) {
+            printf("Addr: %p - ** Block Alignment Error** \n", ptr);
+            assert(0);
+        }
+        /* Each block's bounds check */ 
+        if (!in_heap(ptr)) {
+            printf("Addr: %p - ** Out of Heap Bounds Error** \n", ptr);
+            assert(0);
+        }
 
-        /* Perform all checks done on block */
+        /* Check each block's header and footer */
         checkblock(ptr);
         /* Check coalescing: If alloc bit of current and next block is 0 */
         if (!(GET_ALLOC(HDRP(ptr)) || GET_ALLOC(HDRP(NEXT_BLKP(ptr))))) {
@@ -319,15 +294,13 @@ void mm_checkheap(int lineno) {
     }
 
 
-    /* Heap Check for explicit list */ 
-    ptr = free_listp;     
-
-    /* If our free list is empty, nothing to check */
+    /* Heap Check for explicit + segre list ++ Check handount */ 
+    ptr = free_listp;      
     if (ptr == 0) {
         return;
     }
 
-
+    
     /* Iterating through free list */ 
     while (ptr != NULL) {
         if (!freelistedge(ptr)) {
@@ -355,7 +328,9 @@ void mm_checkheap(int lineno) {
 }
 
 
-/********  The remaining routines are internal helper routines  **************/
+/* 
+ * The remaining routines are internal helper routines 
+ */
 
 /* 
  * extend_heap - Extend heap with free block and return its block pointer
@@ -367,8 +342,6 @@ static void *extend_heap(size_t words)
 
     /* Allocate an even number of words to maintain alignment */
     size = (words % 2) ? (words+1) * WSIZE : words * WSIZE; 
-    if (size < MINIMUM)
-        size = MINIMUM;
     if ((long)(ptr = mem_sbrk(size)) == -1)  
         return NULL;                                        
 
@@ -376,109 +349,86 @@ static void *extend_heap(size_t words)
     PUT(HDRP(ptr), PACK(size, 0));         /* Free block header */   
     PUT(FTRP(ptr), PACK(size, 0));         /* Free block footer */   
     PUT(HDRP(NEXT_BLKP(ptr)), PACK(0, 1)); /* New epilogue header */ 
-
+    
     /* Coalesce if the previous block was free */
     return coalesce(ptr);                                          
 }
 
 /*
- * coalesce - Boundary tag coalescing. Returns ptr to coalesced block
- * Function: Coalesce newly freed block with neighbours, if no neighbour
- * is free, just append new free block to list. 
- *
- * To coalesce newly freed block with neighbours, these are the possibilities
- *    [PREV -  CURR - NEXT ]
- *      ||      ||     ||
- *      ||      ||     ||
- * 1: [ALLOC - FREE - ALLOC  ] Result: Just append new block to list
- * 2: [FREE  - FREE - ALLOC  ] Result: Append new block (PREV + CURR)
- * 3: [ALLOC - FREE - FREE   ] Result: Append new block (CURR + NEXT)
- * 4: [FREE  - FREE - FREE   ] Result: Apppend new block (PREV  + CURR + NEXT)
+ * coalesce - Boundary tag coalescing. Return ptr to coalesced block
  */
 static void *coalesce (void *ptr) 
 {
     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(ptr)));
-    /* When at front, prev block is same as curr block :( Nasty bug it was */
-    if (PREV_BLKP(ptr) == ptr )
-        prev_alloc = 1;
-
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(ptr)));
     size_t size = GET_SIZE(HDRP(ptr));
 
-    /* Case  1 constructed as fall through scenario */ 
 
     if (prev_alloc && !next_alloc) {      /* Case 2 */
         size += GET_SIZE(HDRP(NEXT_BLKP(ptr)));
         removefreeblock(NEXT_BLKP(ptr));           /* remove next block */        
         PUT(HDRP(ptr), PACK(size, 0));
-        PUT(FTRP(ptr), PACK(size,0));
+        PUT(FTRP(ptr), PACK(size, 0));
     }
 
     else if (!prev_alloc && next_alloc) {      /* Case 3 */
         size += GET_SIZE(HDRP(PREV_BLKP(ptr)));
-        removefreeblock(PREV_BLKP(ptr));          /* remove previous block */
-        PUT(FTRP(ptr), PACK(size, 0));
-        PUT(HDRP(PREV_BLKP(ptr)), PACK(size, 0));
         ptr = PREV_BLKP(ptr);
+        removefreeblock(ptr);          /* remove previous block */
+        PUT(HDRP(ptr), PACK(size, 0));
+        PUT(FTRP(ptr), PACK(size, 0));
     }
 
     else if (!prev_alloc && !next_alloc){      /* Case 4 */
-        size += GET_SIZE(HDRP(PREV_BLKP(ptr))) + 
-            GET_SIZE(FTRP(NEXT_BLKP(ptr)));
+        size += GET_SIZE(FTRP(PREV_BLKP(ptr))) + 
+            GET_SIZE(HDRP(NEXT_BLKP(ptr)));
         removefreeblock(NEXT_BLKP(ptr));           /* remove next block */        
         removefreeblock(PREV_BLKP(ptr));         /* remove previous block */
-        PUT(HDRP(PREV_BLKP(ptr)), PACK(size, 0));
-        PUT(FTRP(NEXT_BLKP(ptr)), PACK(size, 0));
         ptr = PREV_BLKP(ptr);
+        PUT(HDRP(ptr), PACK(size, 0));
+        PUT(FTRP(ptr), PACK(size, 0));
     }
 
-
-    /* Insert Coalesced block in free list */
-    insertfreeblock(ptr);       
+    insertfreeblock(ptr);          /* Insert Coalesced block in free list */
 
     return ptr;
 }
 
 /* 
  * place - Place block of asize bytes at start of free block ptr 
- *         Remove free block. 
- *         if remainder < minimum block size, split it up and append it as a 
- *         free block by calling coalesce function. 
- *
+ *         and split if remainder would be at least minimum block size
  */
 static void place(void *ptr, size_t asize)
 {
     size_t csize = GET_SIZE(HDRP(ptr));   
 
 
-    if ((csize - asize) >= (MINIMUM)) { 
+    if ((csize - asize) >= (2*DSIZE)) { 
         PUT(HDRP(ptr), PACK(asize, 1));
         PUT(FTRP(ptr), PACK(asize, 1));
         removefreeblock(ptr);
         ptr = NEXT_BLKP(ptr);
         PUT(HDRP(ptr), PACK(csize-asize, 0));
         PUT(FTRP(ptr), PACK(csize-asize, 0));
-        coalesce(ptr);
+        insertfreeblock(ptr);
     }
     else { 
         PUT(HDRP(ptr), PACK(csize, 1));
         PUT(FTRP(ptr), PACK(csize, 1));
         removefreeblock(ptr);
     }
-
+    
 }
 
 /* 
- * find_fit - Find a fit for a block with asize bytes
- *            Iterate over free list until we get 
- *            free block >= requested asize
+ * find_fit - Find a fit for a block with asize bytes 
  */
 static void *find_fit (size_t asize)
 {
     /* First-fit search */
     void *ptr;
-
-    /* Iterate over free list till we find the first block that fits */
+    
+    /* TODO: Iterate over free list instead */
     for (ptr = free_listp; ptr != NULL; ptr = NEXT_FREEP(ptr)) {
         if (!GET_ALLOC(HDRP(ptr)) && (asize <= GET_SIZE(HDRP(ptr)))) {
             return ptr;
@@ -512,28 +462,13 @@ static void printblock(void *ptr)  {
 
 
 /* 
- * checkblock - check block header and footer. 
+ * Check block - check block header and footer. 
  *
- * It is called by the Check Heap Function. 
- * Performs all checks done on each block. 
- *
- * These are 
- * - Minimum size
- * - Bounds checking
- * - Address alignment
+ * Check min size, alignment, prev/next allocate, free bit consistency,
  * Header and footer match
+ * Called by Mem Heap
  */
 static void checkblock(void *ptr)  {
-    /* Check each block's address alignment */
-    if (!aligned(ptr)) {
-        printf("Addr: %p - ** Block Alignment Error** \n", ptr);
-        assert(0);
-    }
-    /* Each block's bounds check */ 
-    if (!in_heap(ptr)) {
-        printf("Addr: %p - ** Out of Heap Bounds Error** \n", ptr);
-        assert(0);
-    }
     /* Check Minimum size */
     if (GET_ALLOC(HDRP(ptr))) {
         if (GET_SIZE(HDRP(ptr)) < (2*DSIZE)) {
@@ -559,19 +494,18 @@ static void checkblock(void *ptr)  {
 
 
 /* 
- * insertfreeblock - Append free block to the front of list
- *                   Link new block to current free list and
- *                   set new block as top of current list. 
+ * Insert Free Block - Add free block to list.
+ * Free block is added to the front of the list. 
  */
 static void insertfreeblock(void *ptr) {
-    /* If our free list has nothing, set it.  */ 
+    /* special case */ 
     if (free_listp == NULL) {
         NEXT_FREEP(ptr) = NULL;
         PREV_FREEP(ptr) = NULL;
         free_listp = ptr;
         return;
     }
-
+    
     PREV_FREEP(ptr) = NULL;
     NEXT_FREEP(ptr) = free_listp;       /* Set curr next to head of list */
     PREV_FREEP(free_listp) = ptr;                
@@ -581,12 +515,8 @@ static void insertfreeblock(void *ptr) {
 
 
 /* 
- * removefreeblock - Remove freed block from the list. 
- *      Coded to reflect all possible cases to avoid ambiguity
- *      CASE 1: Remove block with only one block in the list
- *      CASE 2: Block is top of list: Set next block as new top. 
- *      CASE 3: Block is end of free list: Set prev block as new end
- *      CASE 4: Freed block is a middle one: Link Prev block to next block
+ * Delete free block - Removes block from list
+ * Handling all four cases with either next/prev pointers being null
  *
  */
 static void removefreeblock(void *ptr) {
@@ -608,11 +538,12 @@ static void removefreeblock(void *ptr) {
 
     /* Case 3 */
     else if ((PREV_FREEP(ptr) != NULL) && (NEXT_FREEP(ptr) == NULL)) {
-        /* Last one now points to NULL */
+         /* Last one now points to NULL */
         NEXT_FREEP(PREV_FREEP(ptr)) = NULL; 
     }
-
+    
     /* Case 4 */
+
     else if ((PREV_FREEP(ptr) != NULL) && (NEXT_FREEP(ptr) != NULL)) {
         PREV_FREEP(NEXT_FREEP(ptr)) = PREV_FREEP(ptr);  
         NEXT_FREEP(PREV_FREEP(ptr)) = NEXT_FREEP(ptr); 
@@ -623,7 +554,7 @@ static void removefreeblock(void *ptr) {
 
 /* 
  * freelistedge - Returns 1 is free list ptr is at edge of list. 
- *                This check is used to handle edge conditions in checkblock. 
+ * This check is used to handle edge conditions. 
  */
 static int freelistedge(void *ptr) {
     return ((NEXT_FREEP(ptr) == NULL) || (PREV_FREEP(ptr) == NULL));
