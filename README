@@ -1,7 +1,7 @@
-#############################
-# CS:APP Malloc Lab
-# Handout files for students
-#############################
+################################################
+# CS:APP CMU 15213 Malloc Implementation
+Name:  tkaboya
+################################################
 
 ***********
 Main Files:
@@ -26,12 +26,12 @@ ftimer.{c,h}	Timer functions based on interval timers and gettimeofday()
 memlib.{c,h}	Models the heap and sbrk function
 
 ***********************
-Example malloc packages
+Available malloc packages
 ***********************
-mm.c            Empty malloc package
+mm.c            Working Explicit Free List Malloc Implementation
 mm-naive.c      Fast but extremely memory-inefficient package
 mm-textbook.c   Implicit list allocator based on CS:APP3e textbook
-
+mm-impwchkheap.c This Explicit list version does not work. 
 *******************************
 Building and running the driver
 *******************************
