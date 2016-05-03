@@ -3,6 +3,18 @@
 Name:  tkaboya
 ################################################
 
+#Personal Implementation of Malloc Package
+Reaches 80% Optimization in comparison to industry strength
+malloc packages used. 
+
+A sobering look at memory management as it is done in C
+
+#HLD Description of my solution 
+Given a huge block of memory, here are the techniques used
+  1. Doubly linked Explicit List of all free blocks. Any allocated block
+  is removed from list.  
+  2. First Fit Search to determine free block in the list
+
 ***********
 Main Files:
 ***********
