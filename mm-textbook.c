@@ -128,7 +128,8 @@ void *malloc(size_t size)
  */
 void free(void *bp)
 {
-    if (bp == 0) 
+    /* Ignore spurious requests */
+    if (bp <= 0) 
         return;
 
     size_t size = GET_SIZE(HDRP(bp));

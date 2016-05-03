@@ -1,5 +1,5 @@
 /*
- * mm.c - Explicity free list Implementation
+ * mm.c - Explicit free list Implementation
  *
  * Timothy Kaboya - tkaboya
  * HLD Description of my solution 
@@ -141,16 +141,13 @@ void *malloc (size_t size) {
     size_t extendsize; /* Amount to extend heap if no fit */
     char *ptr;  
 
-
     if (heap_listp == 0){
         mm_init();
     }
 
-
     /* Ignore spurious requests */
     if (size == 0)
         return NULL;
-
 
     /* Adjust block size to include overhead and alignment reqs. */
     asize = MAX(ALIGN(size) + DSIZE, MINIMUM);
@@ -167,7 +164,6 @@ void *malloc (size_t size) {
         return NULL;                                  
     place(ptr, asize);                                 
 
-
     return ptr;
 }
 
@@ -175,7 +171,6 @@ void *malloc (size_t size) {
  * free - Free a block
  */
 void free (void *ptr) {
-
 
     if (ptr == 0) 
         return;
@@ -190,7 +185,6 @@ void free (void *ptr) {
     PUT(FTRP(ptr), PACK(size, 0));
 
     coalesce(ptr);
-
 }
 
 /*
@@ -212,13 +206,11 @@ void *realloc(void *ptr, size_t size) {
         return malloc(size);
     }
 
-
     /* Original block size */
     oldsize = GET_SIZE(HDRP(ptr));
 
     /* If new size is same as old, just return */
     if (asize == oldsize)  return ptr;
-
 
     newptr = mm_malloc(size);
 
@@ -254,7 +246,7 @@ void *calloc (size_t nmemb, size_t size) {
 
 /*
  * Return whether the pointer is in the heap.
- * May be useful for debugging.
+ * Useful in debugging.
  */
 static int in_heap(const void *p) {
     return p <= mem_heap_hi() && p >= mem_heap_lo();
@@ -262,7 +254,7 @@ static int in_heap(const void *p) {
 
 /*
  * Return whether the pointer is aligned.
- * May be useful for debugging.
+ * Useful in debugging.
  */
 static int aligned(const void *p) {
     return (size_t)ALIGN(p) == (size_t)p;
@@ -318,7 +310,6 @@ void mm_checkheap(int lineno) {
         ptr = NEXT_BLKP(ptr);
     }
 
-
     /* Heap Check for explicit list */ 
     ptr = free_listp;     
 
@@ -326,7 +317,6 @@ void mm_checkheap(int lineno) {
     if (ptr == 0) {
         return;
     }
-
 
     /* Iterating through free list */ 
     while (ptr != NULL) {
@@ -343,7 +333,6 @@ void mm_checkheap(int lineno) {
             assert(0);
         }
         numfree2++; 
-
         ptr = NEXT_FREEP(ptr);
     }
 
@@ -351,7 +340,6 @@ void mm_checkheap(int lineno) {
         printf(" Error: - ** %d Free List Count %d ** \n", numfree1, numfree2);
         assert(0);
     }
-
 }
 
 
